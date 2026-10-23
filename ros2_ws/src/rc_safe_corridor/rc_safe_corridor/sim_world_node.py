@@ -60,9 +60,17 @@ SCENARIOS = {
     # One lap with everything: obstacle on the right (straight 1), obstacle in
     # the first corner, slalom on straight 2, and a "pedestrian" crossing the
     # lane back and forth before the second corner.
-    "tour": [dict(s=1.8, d=-0.22, radius=0.05), dict(s=4.6, d=0.22, radius=0.05),
-             dict(s=7.0, d=0.22, radius=0.05), dict(s=8.4, d=-0.22, radius=0.05),
-             dict(s=9.5, d=0.7, radius=0.08, lat_speed=0.18, lat_min=-0.75, lat_max=0.75)],
+    # Obstacles may carry appear_t / vanish_t (seconds since start) so that a
+    # full block (S5) and a slow lead vehicle (S7) can be part of the same lap
+    # without stopping the demo forever.
+    "tour": [
+        dict(s=1.8, d=-0.22, radius=0.05),                                   # S2 right
+        dict(s=4.6, d=0.22, radius=0.05),                                    # S3 in corner
+        dict(s=7.0, d=0.22, radius=0.05), dict(s=8.4, d=-0.22, radius=0.05), # S4 slalom
+        dict(s=9.5, d=0.7, radius=0.08, lat_speed=0.18, lat_min=-0.75, lat_max=0.75),  # crossing
+        dict(s=11.6, d=0.0, length=0.2, width=0.9, vanish_t=55.0),          # S5 block, opens at 55 s
+        dict(s=1.0, d=0.0, length=0.3, width=0.2, speed=0.25, appear_t=60.0, vanish_t=100.0),  # S7 lead
+    ],
 }
 
 
@@ -152,6 +160,7 @@ class SimWorldNode(Node):
         self.corridor_time = None
         self.laps = 0
         self.last_s = 0.0
+        self.t_sim = 0.0
 
         self.scan_publisher = self.create_publisher(LaserScan, "/scan", qos_profile_sensor_data)
         self.lane_publisher = self.create_publisher(LaneReference, "/lane/reference", 10)
@@ -192,10 +201,16 @@ class SimWorldNode(Node):
         x, y, h = self.track.frenet_to_xy(obs["s"], obs["d"])
         return x, y, h
 
+    def _active(self, obs):
+        return obs.get("appear_t", -1.0) <= self.t_sim < obs.get("vanish_t", float("inf"))
+
     def _step(self):
         dt = self.dt
+        self.t_sim += dt
         # Move dynamic obstacles along the track.
         for obs in self.obstacles:
+            if not self._active(obs):
+                continue
             if obs.get("speed", 0.0):
                 obs["s"] = (obs["s"] + obs["speed"] * dt) % self.track.length
             if obs.get("lat_speed", 0.0):
@@ -274,7 +289,7 @@ class SimWorldNode(Node):
             String(
                 data=(
                     f"s={s_ego:.2f} d={d_ego:+.3f} v={self.v:.2f} steer={math.degrees(self.steer):+.1f}deg "
-                    f"corridor={'ok' if fresh else 'missing'} laps={self.laps}"
+                    f"corridor={'ok' if fresh else 'missing'} laps={self.laps} t={self.t_sim:.0f}s"
                 )
             )
         )
@@ -283,6 +298,8 @@ class SimWorldNode(Node):
     def _obstacles_in_base_link(self):
         result = []
         for obs in self.obstacles:
+            if not self._active(obs):
+                continue
             ox, oy, oh = self._obstacle_pose(obs)
             local = inverse_transform_points(np.array([[ox, oy]]), self.x, self.y, self.yaw)[0]
             result.append(
@@ -370,7 +387,13 @@ class SimWorldNode(Node):
                                     (2, 0.0, (0.4, 0.4, 0.45))):
             pts = [self.track.frenet_to_xy(s, d)[:2] for s in s_values]
             array.markers.append(line(marker_id, pts, *color, width=0.03 if d else 0.01))
+        clear = Marker()
+        clear.action = Marker.DELETEALL
+        clear.ns = "truth_obstacles"
+        array.markers.append(clear)
         for i, obs in enumerate(self.obstacles):
+            if not self._active(obs):
+                continue
             ox, oy, oh = self._obstacle_pose(obs)
             m = Marker()
             m.header.frame_id = "odom"

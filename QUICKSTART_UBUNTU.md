@@ -26,7 +26,7 @@ source install/setup.bash
 ros2 launch rc_safe_corridor sim_demo.launch.py scenario:=slalom
 ```
 
-Kịch bản: `clear | right | left | slalom | curve | block | lead | mixed | tour` (`tour` = một vòng có đủ: vật lệch phải, vật trong cua, slalom, người đi bộ cắt ngang).
+Kịch bản: `clear | right | left | slalom | curve | block | lead | mixed | tour` (`tour` = một vòng có đủ S1–S5, S7: vật lệch phải, vật trong cua, slalom, người đi bộ cắt ngang, vật chắn kín làn mở ra sau 55 s, xe trước chạy chậm xuất hiện lúc 60 s).
 Trong RViz2: vàng = biên làn, cam = LiDAR, đỏ = vật cản đã bám vết,
 xanh = hành lang, trắng = d_ref, mũi tên tím = xe.
 
