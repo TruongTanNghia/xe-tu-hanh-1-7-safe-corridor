@@ -1,0 +1,43 @@
+ekf_filter_node:
+  ros__parameters:
+    frequency: 50.0
+    # RF2O header intervals are about 0.15 s (roughly 6.4 Hz). In
+    # robot_localization, sensor_timeout also bounds the minimum output
+    # cadence; 0.3 s limited filtered odometry to about 3.3 Hz and 0.2 s
+    # produced about 5.5 Hz on the live Pi. Use 0.15 s to permit a filtered
+    # cadence above 6 Hz while retaining the rolling source's independent
+    # 0.6 s freshness/abort guard.
+    sensor_timeout: 0.15
+    two_d_mode: true
+    print_diagnostics: true
+    publish_tf: true
+    publish_acceleration: false
+    dynamic_process_noise_covariance: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    odom0: /odometry/rf2o
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_queue_size: 10
+    odom0_differential: false
+    odom0_relative: false
+    odom0_rejection_threshold: 3.0
+
+    imu0: /bno055/imu
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_queue_size: 20
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: false
+    imu0_rejection_threshold: 3.0

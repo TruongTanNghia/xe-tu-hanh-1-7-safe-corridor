@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>race_cars</name>
+  <version>0.2.0</version>
+  <description>Safety-gated realtime NMPC controller ported from simulation.</description>
+  <maintainer email="phibui2112@gmail.com">RC Car Project</maintainer>
+  <license>BSD-2-Clause</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rc_interfaces</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>casadi</exec_depend>
+  <exec_depend>scipy</exec_depend>
+  <exec_depend>acados_template</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

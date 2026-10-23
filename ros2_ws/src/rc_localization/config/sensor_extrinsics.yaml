@@ -1,0 +1,21 @@
+# Coordinate convention: base_link +X forward, +Y left, +Z up.
+# Origin: midpoint between front/rear axle centers, at wheel-axle height.
+status: measured_ccw_verified
+
+base_link_to_laser:
+  # LiDAR nằm sau IMU/base_link 5 mm; +X là hướng tiến nên phía sau là âm.
+  x: -0.005
+  y: 0.0
+  z: 0.190
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0
+
+base_link_to_imu:
+  # IMU nằm tại trọng tâm hình học xe: giữa cầu trước và cầu sau.
+  x: 0.0
+  y: 0.0
+  z: 0.100
+  roll: 0.0
+  pitch: 0.0
+  yaw: 0.0

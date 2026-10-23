@@ -1,0 +1,16 @@
+image_width: 4608
+image_height: 2592
+camera_name: imx708_wide
+distortion_model: plumb_bob
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1968.9306, 0.0, 2299.3223, 0.0, 1968.0916, 1296.2801, 0.0, 0.0, 1.0]
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [-0.05887515, 0.09960793, 0.00118471, -0.00284405, -0.04624369]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]

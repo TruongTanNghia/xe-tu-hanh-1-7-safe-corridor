@@ -1,0 +1,25 @@
+repositories:
+  vision_opencv:
+    type: git
+    url: https://github.com/ros-perception/vision_opencv.git
+    version: 9800f67cea477c44cfb64e349854bcb6a09dc9ce
+  bno055:
+    type: git
+    url: https://github.com/flynneva/bno055.git
+    version: 45e1ff16936101711260c9fda63fbad99376ce3b
+  rf2o_laser_odometry:
+    type: git
+    url: https://github.com/MAPIRlab/rf2o_laser_odometry.git
+    version: b38c68e46387b98845ecbfeb6660292f967a00d3
+  sllidar_ros2:
+    type: git
+    url: https://github.com/Slamtec/sllidar_ros2.git
+    version: 34300099fadfc772965962dec837bf436706188f
+  micro_ros_agent:
+    type: git
+    url: https://github.com/micro-ROS/micro-ROS-Agent.git
+    version: 4f363a79ae96aed39dcc5269f53f73f6a70d3a2c
+  micro_ros_msgs:
+    type: git
+    url: https://github.com/micro-ROS/micro_ros_msgs.git
+    version: 100bf269e78da3fe0a58f6531ebe47d6991bd9ab

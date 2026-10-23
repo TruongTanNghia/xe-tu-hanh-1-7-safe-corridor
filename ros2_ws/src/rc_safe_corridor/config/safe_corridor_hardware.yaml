@@ -1,0 +1,137 @@
+# Safe Corridor stack — tham số runtime cho xe 1/7 (sa bàn 6,78 x 2,95 m,
+# làn 450 mm, 2 làn = 900 mm, cua R700/R925). Xe: dài 0,632 m, rộng ~0,30 m
+# tính cả bánh, wheelbase 0,375 m, LiDAR A1M8 tại x=-0,005 m, z=0,19 m.
+
+obstacle_detector:
+  ros__parameters:
+    scan_topic: /scan
+    lane_topic: /lane/reference
+    odom_topic: /odometry/filtered
+    base_frame: base_link
+    laser_frame: laser
+    use_tf: true
+    # Fallback nếu TF chưa có; trùng rc_localization/config/sensor_extrinsics.yaml
+    laser_x: -0.005
+    laser_y: 0.0
+    laser_yaw: 0.0
+    # A1. ROI phía trước và hộp thân xe (loại dây, cột camera)
+    roi_x_min: 0.12
+    roi_x_max: 2.5
+    roi_y_abs_max: 1.0
+    body_x_min: -0.40
+    body_x_max: 0.40
+    body_y_abs: 0.18
+    # Lọc theo làn: chỉ giữ điểm trong |d| <= lane_half_width + margin
+    lane_gate_enabled: true
+    lane_half_width: 0.45
+    lane_gate_margin: 0.15
+    lane_timeout_s: 0.5
+    # A2/A3. Breakpoint thích nghi (Borges & Aldon) + fit hình
+    cluster_lambda_deg: 10.0
+    cluster_sigma_r: 0.01
+    cluster_min_points: 3
+    cluster_max_extent_m: 1.2
+    small_object_max_m: 0.12
+    min_radius_m: 0.03
+    # A4. Tracking Kalman CV trong odom (tự về base_link nếu odom stale)
+    tracking_frame: odom
+    odom_timeout_s: 0.5
+    track_process_noise_accel: 1.5
+    track_measurement_noise_m: 0.03
+    track_gate_distance_m: 0.5
+    track_confirm_hits: 3
+    track_max_misses: 5
+    track_max_coast_s: 0.8
+    dynamic_speed_on: 0.15
+    dynamic_speed_off: 0.08
+    publish_markers: true
+
+safe_corridor_planner:
+  ros__parameters:
+    lane_topic: /lane/reference
+    obstacle_topic: /perception/obstacles
+    odom_topic: /odometry/filtered
+    estop_topic: /safety/estop
+    base_frame: base_link
+    rate_hz: 20.0
+    lane_timeout_s: 0.5
+    obstacle_timeout_s: 0.6
+    odom_timeout_s: 0.5
+    minimum_lane_confidence: 0.5
+    lane_smoothing_alpha: 0.6
+    min_obstacle_confidence: 0.3
+    publish_markers: true
+    # C. Hành lang
+    corridor.ds: 0.05
+    corridor.horizon_m: 2.5
+    corridor.vehicle_width: 0.30
+    corridor.front_overhang: 0.32
+    corridor.rear_overhang: 0.32
+    # Toàn bộ dải 2 làn (±0,45 m) là vùng được phép đi; trùng model.cte_limit_m.
+    corridor.lane_half_width: 0.45
+    corridor.margin_lane: 0.03
+    corridor.margin_obstacle: 0.08
+    corridor.margin_s: 0.10
+    corridor.min_obstacle_size: 0.10
+    corridor.min_corridor_width: 0.02
+    corridor.min_overlap: 0.04
+    corridor.max_lateral_slope: 0.45
+    corridor.cost_width: 1.0
+    corridor.cost_center: 2.0
+    corridor.cost_jump: 1.0
+    corridor.cost_switch: 1.5
+    corridor.keep_side_bonus: 0.6
+    corridor.ref_margin: 0.05
+    corridor.ref_center_blend: 0.5
+    corridor.ref_smooth_window: 7
+    corridor.v_cruise: 0.6
+    corridor.v_min_ratio: 0.4
+    corridor.nominal_width: 0.30
+    corridor.a_brake: 1.0
+    corridor.a_lat_max: 1.5
+    corridor.stop_margin: 0.25
+    corridor.v_ego_floor: 0.2
+    corridor.dynamic_time_inflation: 0.10
+    # E. FSM hành vi
+    fsm.v_cruise: 0.6
+    fsm.min_dwell_s: 0.5
+    fsm.clear_time_s: 1.0
+    fsm.stop_clear_time_s: 1.5
+    fsm.lane_lost_timeout_s: 0.5
+    fsm.follow_time_headway_s: 1.0
+    fsm.follow_min_gap_m: 0.5
+    fsm.follow_gain: 0.8
+    fsm.follow_max_speed_ratio: 1.0
+    fsm.blocked_stop_distance_m: 2.0
+    fsm.lead_lateral_tolerance_m: 0.25
+    fsm.lead_speed_min_mps: 0.10
+
+safety_monitor:
+  ros__parameters:
+    scan_topic: /scan
+    odom_topic: /odometry/filtered
+    command_topic: /control/nmpc
+    arm_state_topic: /mcu/arm
+    disarm_service: /actuation/arm
+    base_frame: base_link
+    laser_frame: laser
+    use_tf: true
+    laser_x: -0.005
+    laser_y: 0.0
+    laser_yaw: 0.0
+    command_timeout_s: 0.2
+    scan_timeout_s: 0.6
+    odom_timeout_s: 0.5
+    watchdog_rate_hz: 20.0
+    enable_disarm: true
+    latch_when_disarmed: false
+    # F. Vùng phanh: D = v^2/(2a) + v*t_delay + d0, rộng = 2*half_width
+    zone.a_brake: 1.5
+    zone.t_delay: 0.25
+    zone.d0: 0.20
+    zone.front_overhang: 0.32
+    zone.half_width: 0.17
+    zone.min_points: 3
+    zone.v_assumed_if_odom_stale: 0.8
+    zone.max_zone_length: 2.0
+    zone.min_zone_length: 0.25

@@ -1,0 +1,19 @@
+rf2o_velocity_conditioner:
+  ros__parameters:
+    input_topic: /odometry/rf2o_raw
+    output_topic: /odometry/rf2o
+    odom_frame: odom
+    base_frame: base_link
+    median_window: 3
+    ema_alpha: 0.45
+    use_pose_delta_speed: true
+    pose_direction_epsilon_mps: 0.0001
+    # Stationary pose-delta P99 is 0.00578 m/s; 1580 us mean is ~0.013 m/s.
+    zero_threshold_mps: 0.006
+    max_abs_speed_mps: 1.5
+    max_acceleration_mps2: 3.0
+    reset_gap_s: 0.5
+    variance_window: 30
+    # 5 mm/s standard deviation, above measured stationary variance.
+    variance_floor: 0.000025
+    stale_timeout_s: 0.3

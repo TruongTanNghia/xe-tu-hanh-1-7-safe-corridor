@@ -1,0 +1,26 @@
+# ROS 2 build artifacts
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
+/ros2_ws/test_results/
+/log/
+
+# Source populated reproducibly by vcs
+/ros2_ws/src/vendor/
+
+# Local read-only migration material; approved firmware is under firmware/.
+/archive/
+
+# Runtime evidence
+/evidence/
+
+# Runtime-generated DDS/evaluation files
+*.bag
+*.db3
+*.mcap
+
+# Python cache
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/

@@ -1,0 +1,68 @@
+[
+  {
+    "scenario": "s1",
+    "title": "Không vật cản",
+    "state": "LANE_FOLLOW",
+    "feasible": true,
+    "side": 0,
+    "blocked_at_s": -1.0,
+    "min_free_width": 0.54,
+    "tracks": 0,
+    "v_ref": 0.6
+  },
+  {
+    "scenario": "s2",
+    "title": "1 vật tĩnh lệch phải trên đoạn thẳng",
+    "state": "AVOID",
+    "feasible": true,
+    "side": 1,
+    "blocked_at_s": -1.0,
+    "min_free_width": 0.201,
+    "tracks": 1,
+    "v_ref": 0.6
+  },
+  {
+    "scenario": "s3",
+    "title": "1 vật tĩnh lệch trái trong cua R700",
+    "state": "AVOID",
+    "feasible": true,
+    "side": 2,
+    "blocked_at_s": -1.0,
+    "min_free_width": 0.224,
+    "tracks": 1,
+    "v_ref": 0.6
+  },
+  {
+    "scenario": "s4",
+    "title": "2 vật so le (slalom)",
+    "state": "AVOID",
+    "feasible": true,
+    "side": 1,
+    "blocked_at_s": -1.0,
+    "min_free_width": 0.083,
+    "tracks": 2,
+    "v_ref": 0.6
+  },
+  {
+    "scenario": "s5",
+    "title": "Vật chắn kín làn",
+    "state": "STOP",
+    "feasible": false,
+    "side": 0,
+    "blocked_at_s": 0.95,
+    "min_free_width": 0.54,
+    "tracks": 1,
+    "v_ref": 0.0
+  },
+  {
+    "scenario": "s7",
+    "title": "Xe trước chạy chậm cùng chiều",
+    "state": "FOLLOW",
+    "feasible": true,
+    "side": 0,
+    "blocked_at_s": -1.0,
+    "min_free_width": 0.54,
+    "tracks": 1,
+    "v_ref": 0.6
+  }
+]

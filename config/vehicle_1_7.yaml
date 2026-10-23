@@ -1,0 +1,43 @@
+schema_version: 1
+vehicle_id: autonomous_car_1_7
+ros_distro: humble
+platform:
+  computer: raspberry_pi_5
+  os: raspberry_pi_os_debian_12
+  runtime: native
+
+# Đây là index cấu hình, không lặp lại tham số runtime để tránh hai nguồn sự thật.
+runtime_config:
+  camera: ros2_ws/src/hardware_camera/config/imx708_wide_4608x2592.yaml
+  fusion: ros2_ws/src/rc_localization/config/ekf_hardware.yaml
+  sensor_extrinsics: ros2_ws/src/rc_localization/config/sensor_extrinsics.yaml
+  bno055: ros2_ws/src/rc_localization/config/bno055_hardware.yaml
+  velocity_conditioner: ros2_ws/src/rc_localization/config/velocity_conditioner.yaml
+  nmpc: ros2_ws/src/race_cars/config/nmpc_hardware.yaml
+  actuation: ros2_ws/src/rc_actuation/config/actuation_hardware.yaml
+  safe_corridor: ros2_ws/src/rc_safe_corridor/config/safe_corridor_hardware.yaml
+
+interfaces:
+  body_frame: base_link
+  laser_frame: laser
+  imu_frame: imu_link
+  camera_frame: camera_optical_frame
+  scan_topic: /scan
+  odometry_topic: /odometry/filtered
+  lane_topic: /lane/reference
+  control_topic: /control/nmpc
+  obstacle_topic: /perception/obstacles
+  corridor_topic: /planning/corridor
+  behavior_topic: /planning/behavior
+  safety_estop_topic: /safety/estop
+  actuator_topic: /mcu/actuator_cmd
+
+calibration_status:
+  camera_intrinsics: imported_from_research
+  camera_extrinsics: provisional_requires_measurement
+  lidar_extrinsics: measured_ccw_verified
+  imu_extrinsics_and_axis: measured_ccw_verified
+  steering_mapping: enabled_operator_confirmed_wheels_up
+  esc_mapping: provisional_bench_values
+  nmpc_longitudinal_model: blocked_requires_step_response
+  safe_corridor_stack: code_complete_offline_tested_no_runtime_evidence

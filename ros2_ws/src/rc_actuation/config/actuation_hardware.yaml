@@ -1,0 +1,25 @@
+actuation_manager:
+  ros__parameters:
+    control_rate_hz: 50.0
+    command_timeout_s: 0.2
+    mcu_timeout_s: 0.75
+    # Stop immediately on invalid NMPC, but only latch DISARMED if the
+    # invalid condition persists. This tolerates isolated camera frames.
+    invalid_command_grace_s: 0.5
+
+    # Phải đổi thành true sau khi có evidence calibration vật lý.
+    steering_calibrated: true
+    esc_calibrated: true
+
+    servo_center_us: 1500
+    servo_min_us: 1150
+    servo_max_us: 1850
+    # Measured on 2026-06-29:
+    # 1150us ~= -30deg, 1500us ~= 0deg, 1850us ~= +30deg.
+    # 350us / deg2rad(30) = 668.45 us/rad.
+    servo_us_per_rad: 668.45
+
+    esc_stop_us: 1550
+    esc_forward_start_us: 1580
+    esc_max_us: 1600
+    esc_rise_rate_us_per_s: 50.0
