@@ -12,7 +12,8 @@ It simulates:
     /odometry/filtered and TF odom->base_link->laser,
   * ground-truth markers for RViz2 (/sim/track_markers).
 
-    ros2 run rc_safe_corridor sim_world --ros-args -p scenario:=slalom
+    ros2 run rc_safe_corridor sim_world --ros-args -p scenario:=tour
+    scenarios: clear | right | left | slalom | curve | block | lead | mixed | tour
 """
 
 import math
@@ -56,6 +57,12 @@ SCENARIOS = {
     "lead": [dict(s=2.0, d=0.0, length=0.3, width=0.2, speed=0.25)],
     "mixed": [dict(s=2.5, d=-0.22, radius=0.05), dict(s=4.6, d=0.22, radius=0.05),
               dict(s=7.5, d=0.0, length=0.3, width=0.2, speed=0.25)],
+    # One lap with everything: obstacle on the right (straight 1), obstacle in
+    # the first corner, slalom on straight 2, and a "pedestrian" crossing the
+    # lane back and forth before the second corner.
+    "tour": [dict(s=1.8, d=-0.22, radius=0.05), dict(s=4.6, d=0.22, radius=0.05),
+             dict(s=7.0, d=0.22, radius=0.05), dict(s=8.4, d=-0.22, radius=0.05),
+             dict(s=9.5, d=0.7, radius=0.08, lat_speed=0.18, lat_min=-0.75, lat_max=0.75)],
 }
 
 
@@ -191,6 +198,15 @@ class SimWorldNode(Node):
         for obs in self.obstacles:
             if obs.get("speed", 0.0):
                 obs["s"] = (obs["s"] + obs["speed"] * dt) % self.track.length
+            if obs.get("lat_speed", 0.0):
+                # Pedestrian-like crossing: oscillate laterally between the limits.
+                obs["d"] += obs["lat_speed"] * dt
+                if obs["d"] > obs.get("lat_max", 0.7):
+                    obs["d"] = obs.get("lat_max", 0.7)
+                    obs["lat_speed"] = -abs(obs["lat_speed"])
+                elif obs["d"] < obs.get("lat_min", -0.7):
+                    obs["d"] = obs.get("lat_min", -0.7)
+                    obs["lat_speed"] = abs(obs["lat_speed"])
 
         # Controller from the corridor (d_ref / v_max / v_ref).
         fresh = (
