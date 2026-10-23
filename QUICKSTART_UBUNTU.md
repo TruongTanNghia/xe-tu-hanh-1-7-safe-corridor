@@ -12,6 +12,16 @@ pip3 install numpy scipy pytest
 bash scripts/corridor_offline_demo.sh            # SVG + summary.json vào evidence/
 ```
 
+## 1b. Xem mô phỏng real-time KHÔNG cần ROS (Windows / macOS / Linux)
+
+```bash
+pip3 install numpy scipy matplotlib
+cd ros2_ws/src/rc_safe_corridor
+python3 -m rc_safe_corridor.sim_view --scenario tour            # mở cửa sổ animation
+python3 -m rc_safe_corridor.sim_view --scenario tour --save demo.mp4 --duration 100   # xuất video (cần ffmpeg)
+```
+Cùng vòng lặp kín như bản ROS 2 (LiDAR giả → nhận vật cản → Frenet → hành lang → FSM → xe), chỉ khác là vẽ bằng matplotlib thay vì RViz2.
+
 ## 2. Demo real-time trong ROS 2 + RViz2 (không cần xe, không cần acados)
 
 Mô phỏng xe chạy trên sa bàn oval, LiDAR giả, lane giả; stack corridor chạy
@@ -26,7 +36,7 @@ source install/setup.bash
 ros2 launch rc_safe_corridor sim_demo.launch.py scenario:=slalom
 ```
 
-Kịch bản: `clear | right | left | slalom | curve | block | lead | mixed | tour` (`tour` = một vòng có đủ S1–S5, S7: vật lệch phải, vật trong cua, slalom, người đi bộ cắt ngang, vật chắn kín làn mở ra sau 55 s, xe trước chạy chậm xuất hiện lúc 60 s).
+Kịch bản: `clear | right | left | slalom | curve | block | lead | mixed | tour` (`tour` = một vòng có đủ S1–S5, S7: vật lệch phải, vật trong cua, slalom, người đi bộ băng qua khi xe tới gần, vật chắn kín làn mở ra ở giây 45, xe trước chạy chậm xuất hiện giây 50 và rời đi giây 85).
 Trong RViz2: vàng = biên làn, cam = LiDAR, đỏ = vật cản đã bám vết,
 xanh = hành lang, trắng = d_ref, mũi tên tím = xe.
 

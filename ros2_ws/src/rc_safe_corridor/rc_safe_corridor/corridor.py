@@ -59,6 +59,7 @@ class CorridorParams:
     stop_margin: float = 0.25
     v_ego_floor: float = 0.2
     dynamic_time_inflation: float = 0.10   # m per second of prediction
+    max_prediction_s: float = 2.0          # cap on CV prediction time for dynamic obstacles
 
 
 @dataclass
@@ -146,11 +147,15 @@ def _forbidden_at_station(obs: FrenetObstacle, s_i, params: CorridorParams, v_eg
         d_hi += pad
     extra = 0.0
     if obs.is_dynamic:
-        t_i = max(s_i, 0.0) / max(float(v_ego), params.v_ego_floor)
-        s_lo += obs.vs * t_i
-        s_hi += obs.vs * t_i
-        d_lo += obs.vd * t_i
-        d_hi += obs.vd * t_i
+        # Forbid the swept region between now and the predicted position at
+        # the time the ego reaches this station. Using the prediction alone
+        # lets a slowly accelerating ego drive into an object that is still
+        # physically in the lane; the union is conservative but safe.
+        t_i = min(max(s_i, 0.0) / max(float(v_ego), params.v_ego_floor), params.max_prediction_s)
+        s_lo = min(s_lo, s_lo + obs.vs * t_i)
+        s_hi = max(s_hi, s_hi + obs.vs * t_i)
+        d_lo = min(d_lo, d_lo + obs.vd * t_i)
+        d_hi = max(d_hi, d_hi + obs.vd * t_i)
         extra = params.dynamic_time_inflation * t_i
     s_lo -= params.rear_overhang + params.margin_s
     s_hi += params.front_overhang + params.margin_s

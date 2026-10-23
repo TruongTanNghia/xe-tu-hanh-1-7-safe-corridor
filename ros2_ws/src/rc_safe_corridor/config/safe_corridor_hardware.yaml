@@ -92,6 +92,7 @@ safe_corridor_planner:
     corridor.stop_margin: 0.25
     corridor.v_ego_floor: 0.2
     corridor.dynamic_time_inflation: 0.10
+    corridor.max_prediction_s: 2.0
     # E. FSM hành vi
     fsm.v_cruise: 0.6
     fsm.min_dwell_s: 0.5
@@ -102,7 +103,7 @@ safe_corridor_planner:
     fsm.follow_min_gap_m: 0.5
     fsm.follow_gain: 0.8
     fsm.follow_max_speed_ratio: 1.0
-    fsm.blocked_stop_distance_m: 2.0
+    fsm.blocked_stop_distance_m: 1.2
     fsm.lead_lateral_tolerance_m: 0.25
     fsm.lead_speed_min_mps: 0.10
 

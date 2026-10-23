@@ -32,6 +32,7 @@ from std_msgs.msg import ColorRGBA, String
 from visualization_msgs.msg import Marker, MarkerArray
 
 from rc_safe_corridor.geometry import inverse_transform_points, wrap_angle
+from rc_safe_corridor.sim_track import SCENARIOS, OvalTrack, advance_obstacles, obstacle_active
 from rc_safe_corridor.synthetic import SimObstacle, synthetic_scan
 
 try:
@@ -43,76 +44,6 @@ except Exception:  # pragma: no cover
 LATCHED_QOS = QoSProfile(
     depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL
 )
-
-# Scenarios: list of obstacles as dicts in track coordinates (s along the
-# centre line from the start, d positive to the left).
-SCENARIOS = {
-    "clear": [],
-    "right": [dict(s=3.0, d=-0.22, radius=0.05)],
-    "left": [dict(s=3.0, d=0.22, radius=0.05)],
-    "slalom": [dict(s=2.5, d=-0.22, radius=0.05), dict(s=3.9, d=0.22, radius=0.05),
-               dict(s=5.3, d=-0.22, radius=0.05)],
-    "curve": [dict(s=4.6, d=0.22, radius=0.05)],
-    "block": [dict(s=3.5, d=0.0, length=0.2, width=0.9)],
-    "lead": [dict(s=2.0, d=0.0, length=0.3, width=0.2, speed=0.25)],
-    "mixed": [dict(s=2.5, d=-0.22, radius=0.05), dict(s=4.6, d=0.22, radius=0.05),
-              dict(s=7.5, d=0.0, length=0.3, width=0.2, speed=0.25)],
-    # One lap with everything: obstacle on the right (straight 1), obstacle in
-    # the first corner, slalom on straight 2, and a "pedestrian" crossing the
-    # lane back and forth before the second corner.
-    # Obstacles may carry appear_t / vanish_t (seconds since start) so that a
-    # full block (S5) and a slow lead vehicle (S7) can be part of the same lap
-    # without stopping the demo forever.
-    "tour": [
-        dict(s=1.8, d=-0.22, radius=0.05),                                   # S2 right
-        dict(s=4.6, d=0.22, radius=0.05),                                    # S3 in corner
-        dict(s=7.0, d=0.22, radius=0.05), dict(s=8.4, d=-0.22, radius=0.05), # S4 slalom
-        dict(s=9.5, d=0.7, radius=0.08, lat_speed=0.18, lat_min=-0.75, lat_max=0.75),  # crossing
-        dict(s=11.6, d=0.0, length=0.2, width=0.9, vanish_t=55.0),          # S5 block, opens at 55 s
-        dict(s=1.0, d=0.0, length=0.3, width=0.2, speed=0.25, appear_t=60.0, vanish_t=100.0),  # S7 lead
-    ],
-}
-
-
-class OvalTrack:
-    def __init__(self, straight_m=3.5, radius_m=0.925, ds=0.02):
-        self.straight = float(straight_m)
-        self.radius = float(radius_m)
-        self.length = 2.0 * self.straight + 2.0 * math.pi * self.radius
-        self.ds = ds
-        self.s_samples = np.arange(0.0, self.length, ds)
-        self.xy = np.array([self.pose(s)[:2] for s in self.s_samples])
-
-    def pose(self, s):
-        """(x, y, heading, kappa) of the centre line at arc length s."""
-        s = float(s) % self.length
-        L, R = self.straight, self.radius
-        half = math.pi * R
-        if s < L:
-            return s, 0.0, 0.0, 0.0
-        s -= L
-        if s < half:
-            a = s / R
-            return L + R * math.sin(a), R - R * math.cos(a), a, 1.0 / R
-        s -= half
-        if s < L:
-            return L - s, 2.0 * R, math.pi, 0.0
-        s -= L
-        a = s / R
-        return -R * math.sin(a), R + R * math.cos(a), math.pi + a, 1.0 / R
-
-    def frenet_to_xy(self, s, d):
-        x, y, h, _k = self.pose(s)
-        return x - d * math.sin(h), y + d * math.cos(h), h
-
-    def project(self, x, y):
-        """Return (s, d, heading, kappa) of the nearest centre-line point."""
-        idx = int(np.argmin(np.hypot(self.xy[:, 0] - x, self.xy[:, 1] - y)))
-        s = float(self.s_samples[idx])
-        px, py, h, k = self.pose(s)
-        d = -math.sin(h) * (x - px) + math.cos(h) * (y - py)
-        return s, d, h, k
-
 
 class SimWorldNode(Node):
     def __init__(self):
@@ -202,26 +133,12 @@ class SimWorldNode(Node):
         return x, y, h
 
     def _active(self, obs):
-        return obs.get("appear_t", -1.0) <= self.t_sim < obs.get("vanish_t", float("inf"))
+        return obstacle_active(obs, self.t_sim)
 
     def _step(self):
         dt = self.dt
         self.t_sim += dt
-        # Move dynamic obstacles along the track.
-        for obs in self.obstacles:
-            if not self._active(obs):
-                continue
-            if obs.get("speed", 0.0):
-                obs["s"] = (obs["s"] + obs["speed"] * dt) % self.track.length
-            if obs.get("lat_speed", 0.0):
-                # Pedestrian-like crossing: oscillate laterally between the limits.
-                obs["d"] += obs["lat_speed"] * dt
-                if obs["d"] > obs.get("lat_max", 0.7):
-                    obs["d"] = obs.get("lat_max", 0.7)
-                    obs["lat_speed"] = -abs(obs["lat_speed"])
-                elif obs["d"] < obs.get("lat_min", -0.7):
-                    obs["d"] = obs.get("lat_min", -0.7)
-                    obs["lat_speed"] = abs(obs["lat_speed"])
+        advance_obstacles(self.obstacles, dt, self.t_sim, self.track, ego_xy=(self.x, self.y))
 
         # Controller from the corridor (d_ref / v_max / v_ref).
         fresh = (

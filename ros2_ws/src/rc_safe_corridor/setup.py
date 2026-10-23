@@ -43,6 +43,7 @@ setup(
             "safety_monitor = rc_safe_corridor.safety_monitor_node:main",
             "corridor_offline_demo = rc_safe_corridor.offline_demo:main",
             "sim_world = rc_safe_corridor.sim_world_node:main",
+            "sim_view = rc_safe_corridor.sim_view:main",
         ],
     },
 )

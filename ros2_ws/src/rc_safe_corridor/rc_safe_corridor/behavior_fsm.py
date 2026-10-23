@@ -35,7 +35,7 @@ class FsmParams:
     follow_min_gap_m: float = 0.5
     follow_gain: float = 0.8
     follow_max_speed_ratio: float = 1.0
-    blocked_stop_distance_m: float = 2.0   # blocked_at_s below this forces STOP
+    blocked_stop_distance_m: float = 1.2   # blocked_at_s below this forces STOP; farther -> v_max profile slows down
     lead_lateral_tolerance_m: float = 0.25
     lead_speed_min_mps: float = 0.10
 
