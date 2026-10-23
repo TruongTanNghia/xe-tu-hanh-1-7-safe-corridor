@@ -18,7 +18,7 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         (
             os.path.join("share", package_name, "config"),
-            glob("config/*.yaml"),
+            glob("config/*.yaml") + glob("config/*.rviz"),
         ),
         (
             os.path.join("share", package_name, "launch"),
@@ -42,6 +42,7 @@ setup(
             "rc_safe_corridor.safe_corridor_planner_node:main",
             "safety_monitor = rc_safe_corridor.safety_monitor_node:main",
             "corridor_offline_demo = rc_safe_corridor.offline_demo:main",
+            "sim_world = rc_safe_corridor.sim_world_node:main",
         ],
     },
 )

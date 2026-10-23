@@ -20,6 +20,7 @@ class SimObstacle:
     vx: float = 0.0
     vy: float = 0.0
     name: str = "obstacle"
+    yaw: float = 0.0            # box orientation
 
     def advance(self, dt):
         self.x += self.vx * dt
@@ -95,7 +96,14 @@ def synthetic_scan(
         best = math.inf
         for obs in obstacles:
             if obs.length > 0.0:
-                t = _ray_box((lx, ly), direction, obs.x, obs.y, obs.length, obs.width)
+                if abs(obs.yaw) > 1e-9:
+                    c, s_ = math.cos(-obs.yaw), math.sin(-obs.yaw)
+                    ox, oy = lx - obs.x, ly - obs.y
+                    origin_b = (c * ox - s_ * oy, s_ * ox + c * oy)
+                    dir_b = (c * direction[0] - s_ * direction[1], s_ * direction[0] + c * direction[1])
+                    t = _ray_box(origin_b, dir_b, 0.0, 0.0, obs.length, obs.width)
+                else:
+                    t = _ray_box((lx, ly), direction, obs.x, obs.y, obs.length, obs.width)
             else:
                 t = _ray_circle((lx, ly), direction, obs.x, obs.y, obs.radius)
             best = min(best, t)

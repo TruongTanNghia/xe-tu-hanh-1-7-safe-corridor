@@ -131,13 +131,16 @@ def build_reference_path(
     fx, fy, ft = _integrate_curvature(
         xs[-1], ys[-1], thetas[-1], [kappa_end] * n_fwd, [ds] * n_fwd
     )
-    # Backward extrapolation: straight line along the start tangent.
+    # Backward extrapolation with the start curvature (reversed traversal of a
+    # left turn is a right turn, hence -kappa). A straight back-extrapolation
+    # would misplace the ego by ~x0^2/(2R) in the R0.7 corners.
+    kappa_start = float(kappas[0])
     n_back = int(math.ceil((x0 + float(back_m)) / ds)) + 1
-    bx, by, bt = _integrate_curvature(
-        xs[0], ys[0], thetas[0] + math.pi, [0.0] * n_back, [ds] * n_back
+    bx, by, _bt = _integrate_curvature(
+        xs[0], ys[0], thetas[0] + math.pi, [-kappa_start] * n_back, [ds] * n_back
     )
     bx, by = bx[1:][::-1], by[1:][::-1]
-    bt = np.full(bx.shape, thetas[0])
+    bt = thetas[0] - kappa_start * ds * np.arange(len(bx), 0, -1)
 
     all_x = np.concatenate([bx, xs, fx[1:]])
     all_y = np.concatenate([by, ys, fy[1:]])

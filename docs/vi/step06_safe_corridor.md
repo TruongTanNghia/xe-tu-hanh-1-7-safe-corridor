@@ -140,6 +140,10 @@ bash scripts/test.sh rc_safe_corridor race_cars
 # Demo offline, không cần ROS (máy phát triển hoặc Pi)
 bash scripts/corridor_offline_demo.sh              # SVG + summary.json vào evidence/
 
+# Demo real-time ROS 2 + RViz2, không cần xe/acados (sim_world: sa bàn oval,
+# LiDAR + lane giả, xe tự lách theo hành lang)
+ros2 launch rc_safe_corridor sim_demo.launch.py scenario:=slalom   # clear|right|left|slalom|curve|block|lead|mixed
+
 # Chỉ stack corridor (sensors + NMPC đã chạy ở terminal khác)
 bash scripts/run_safe_corridor.sh stack enable_disarm:=false
 
