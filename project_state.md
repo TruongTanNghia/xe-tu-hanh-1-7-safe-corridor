@@ -433,6 +433,7 @@ actuation DISARMED nếu runtime được khởi động lại. Thứ tự tiế
 - [`docs/vi/README.md`](docs/vi/README.md): mục lục tài liệu vận hành.
 - [`docs/vi/operator_runbook.md`](docs/vi/operator_runbook.md): runbook gate.
 - [`docs/vi/step03_nmpc.md`](docs/vi/step03_nmpc.md): NMPC shadow/active gate.
+- [`docs/vi/deploy_pi.md`](docs/vi/deploy_pi.md): đưa code xuống Pi, kiểm tra từng lớp, safety trước active.
 - [`docs/vi/step06_safe_corridor.md`](docs/vi/step06_safe_corridor.md):
   vật cản LiDAR, hành lang an toàn, FSM, NMPC ràng buộc hành lang, safety monitor.
 - [`docs/vi/step04_microros_actuation.md`](docs/vi/step04_microros_actuation.md):
