@@ -44,6 +44,7 @@ setup(
             "corridor_offline_demo = rc_safe_corridor.offline_demo:main",
             "sim_world = rc_safe_corridor.sim_world_node:main",
             "sim_view = rc_safe_corridor.sim_view:main",
+            "corridor_follower = rc_safe_corridor.corridor_follower_node:main",
         ],
     },
 )

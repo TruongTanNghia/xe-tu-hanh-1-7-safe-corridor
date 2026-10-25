@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+<!--
+  1/7 car from rc_description + RPLIDAR A1M8 (2D, 360 deg).
+  Mount matches rc_localization/config/sensor_extrinsics.yaml on the real car:
+  base_link -> laser: x = -0.005 m, y = 0, z = 0.190 m (base_link is at the
+  middle of the wheelbase, at axle height).
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rc_1_7_lidar">
+    <xacro:arg name="use_ros2_control" default="true"/>
+    <xacro:arg name="controllers_file" default=""/>
+    <xacro:arg name="lidar_samples" default="720"/>
+    <xacro:arg name="lidar_rate_hz" default="10"/>
+
+    <xacro:include filename="$(find rc_description)/urdf/rc_1_7.urdf.xacro"/>
+
+    <link name="laser">
+        <visual>
+            <geometry>
+                <cylinder radius="0.035" length="0.04"/>
+            </geometry>
+            <material name="lidar_black">
+                <color rgba="0.05 0.05 0.05 1.0"/>
+            </material>
+        </visual>
+        <inertial>
+            <mass value="0.01"/>
+            <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+        </inertial>
+    </link>
+
+    <joint name="laser_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="laser"/>
+        <origin xyz="-0.005 0 0.190" rpy="0 0 0"/>
+    </joint>
+
+    <gazebo reference="laser">
+        <material>Gazebo/Black</material>
+        <sensor name="rplidar_a1" type="ray">
+            <always_on>true</always_on>
+            <visualize>true</visualize>
+            <update_rate>$(arg lidar_rate_hz)</update_rate>
+            <pose>0 0 0 0 0 0</pose>
+            <ray>
+                <scan>
+                    <horizontal>
+                        <samples>$(arg lidar_samples)</samples>
+                        <resolution>1</resolution>
+                        <min_angle>-3.14159265</min_angle>
+                        <max_angle>3.14159265</max_angle>
+                    </horizontal>
+                </scan>
+                <range>
+                    <min>0.15</min>
+                    <max>12.0</max>
+                    <resolution>0.01</resolution>
+                </range>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.005</stddev>
+                </noise>
+            </ray>
+            <plugin name="rplidar_a1_driver" filename="libgazebo_ros_ray_sensor.so">
+                <ros>
+                    <remapping>~/out:=/scan</remapping>
+                </ros>
+                <output_type>sensor_msgs/LaserScan</output_type>
+                <frame_name>laser</frame_name>
+            </plugin>
+        </sensor>
+    </gazebo>
+</robot>

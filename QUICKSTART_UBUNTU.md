@@ -48,6 +48,18 @@ ros2 topic echo /sim/status
 ```
 Nếu RViz2 không mở được trong máy ảo: `export LIBGL_ALWAYS_SOFTWARE=1` rồi chạy lại.
 
+## 2b. Mô phỏng Gazebo Classic 11 (xe có LiDAR, sa bàn hai làn, vật cản)
+
+```bash
+sudo apt install -y ros-humble-gazebo-ros-pkgs ros-humble-gazebo-ros2-control   ros-humble-ros2-controllers ros-humble-xacro ros-humble-robot-state-publisher
+source /opt/ros/humble/setup.bash
+cd ros2_ws && colcon build --symlink-install --packages-select rc_interfaces rc_safe_corridor && source install/setup.bash
+cd ../sim_ws && colcon build --symlink-install && source install/setup.bash
+ros2 launch rc_gazebo_corridor gazebo_corridor.launch.py scenario:=tour
+```
+Chi tiết, tham số và xử lý sự cố: `docs/vi/gazebo_safe_corridor.md`.
+Bảng toàn bộ thông số đã dùng: `docs/vi/thong_so_ky_thuat.md`.
+
 ## 3. Build đầy đủ cho xe thật
 
 ```bash

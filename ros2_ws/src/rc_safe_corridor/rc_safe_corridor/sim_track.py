@@ -29,8 +29,12 @@ SCENARIOS = {
         # Pedestrian waiting at the left edge; starts crossing to the right
         # (and out of the lane) when the ego comes within 1.6 m.
         dict(s=9.5, d=0.55, radius=0.08, lat_speed=0.18, cross_to=-0.8, cross_trigger_m=1.6),
-        dict(s=11.6, d=0.0, length=0.2, width=0.9, vanish_t=45.0),          # S5 block, opens at 45 s
-        dict(s=1.5, d=0.0, length=0.3, width=0.2, speed=0.25, appear_t=50.0, vanish_t=85.0),   # S7 lead
+        # S5: full block; removed 6 s after the car has come within 1.6 m.
+        dict(s=11.6, d=0.0, length=0.2, width=0.9, vanish_after_near_s=6.0, near_m=1.6),
+        # S7: slow lead car; appears 1.3 m ahead once the block is gone and the
+        # car is back on the first straight, drives 0.25 m/s for 30 s.
+        dict(s=0.0, d=0.0, length=0.3, width=0.2, speed=0.25, appear_after=5,
+             appear_at_ego_s=(0.2, 1.2), place_ahead_m=1.3, active_for_s=30.0),
     ],
 }
 
@@ -75,8 +79,62 @@ class OvalTrack:
         return s, d, h, k
 
 
+TRIGGER_KEYS = ("vanish_after_near_s", "appear_after", "appear_at_ego_s")
+
+
+def is_triggered(obs):
+    return any(key in obs for key in TRIGGER_KEYS)
+
+
+def initially_active(obs):
+    if "appear_after" in obs or "appear_at_ego_s" in obs:
+        return False
+    return obs.get("appear_t", -1.0) <= 0.0
+
+
 def obstacle_active(obs, t_sim):
+    if "_on" in obs:
+        return obs["_on"]
+    if "appear_after" in obs or "appear_at_ego_s" in obs:
+        return False
     return obs.get("appear_t", -1.0) <= t_sim < obs.get("vanish_t", float("inf"))
+
+
+def _update_triggers(obstacles, t_sim, track, ego_xy):
+    """Position-triggered appear / vanish so scenarios do not depend on how
+    fast the car happens to drive (lightweight sim vs Gazebo)."""
+    if ego_xy is None:
+        return
+    s_ego = None
+    for obs in obstacles:
+        if not is_triggered(obs):
+            continue
+        if "_on" not in obs:
+            obs["_on"] = initially_active(obs)
+            obs["_done"] = False
+        if obs["_on"] and "vanish_after_near_s" in obs:
+            if s_ego is None:
+                s_ego = track.project(*ego_xy)[0]
+            ahead = (obs["s"] - s_ego) % track.length   # along-track distance in front
+            if "_near_t" not in obs and ahead <= obs.get("near_m", 1.5):
+                obs["_near_t"] = t_sim
+            if "_near_t" in obs and t_sim - obs["_near_t"] >= obs["vanish_after_near_s"]:
+                obs["_on"] = False
+                obs["_done"] = True
+        if not obs["_on"] and not obs["_done"] and "appear_at_ego_s" in obs:
+            prereq = obs.get("appear_after")
+            if prereq is not None and not obstacles[prereq].get("_done", False):
+                continue
+            if s_ego is None:
+                s_ego = track.project(*ego_xy)[0]
+            lo, hi = obs["appear_at_ego_s"]
+            if lo <= s_ego <= hi:
+                obs["_on"] = True
+                obs["_on_t"] = t_sim
+                obs["s"] = (s_ego + obs.get("place_ahead_m", 1.2)) % track.length
+        if obs["_on"] and "active_for_s" in obs and t_sim - obs.get("_on_t", t_sim) >= obs["active_for_s"]:
+            obs["_on"] = False
+            obs["_done"] = True
 
 
 def advance_obstacles(obstacles, dt, t_sim, track, ego_xy=None):
@@ -88,6 +146,7 @@ def advance_obstacles(obstacles, dt, t_sim, track, ego_xy=None):
       then stays there (out of the lane).
     * lat_speed + lat_min/lat_max: keep oscillating laterally.
     """
+    _update_triggers(obstacles, t_sim, track, ego_xy)
     for obs in obstacles:
         if not obstacle_active(obs, t_sim):
             continue

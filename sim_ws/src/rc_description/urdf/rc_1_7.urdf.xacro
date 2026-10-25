@@ -1,0 +1,536 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rc_1_7">
+    <!-- ================================================================
+         RC Car Description - 1/7 Scale Primitive Model
+         ROS 2 Humble | +X forward, +Y left, +Z up
+
+         All geometry uses primitives (boxes, cylinders). No STL meshes.
+         Frame and joint names are compatible with the existing 1/16 stack.
+         Measured 1/7 vehicle values:
+           wheelbase = 0.375 m
+           track_width = 0.260 m
+           wheel_radius = 0.049 m
+           wheel_width = 0.038 m
+           vehicle_length = 0.632 m
+           vehicle_width = 0.290 m
+           vehicle_height = 0.237 m
+           total_mass = 6.5 kg
+           camera: x=0.146, z=0.156 from base_link, pitch=+0.5236 rad
+         ================================================================ -->
+
+    <xacro:arg name="use_ros2_control" default="false"/>
+    <xacro:arg name="controllers_file" default=""/>
+
+    <!-- ================================================================
+         Vehicle Geometry (1/7 scale measured values)
+         ================================================================ -->
+    <xacro:property name="wheelbase"             value="0.375"/>
+    <xacro:property name="track_width"           value="0.260"/>
+    <xacro:property name="half_track"            value="0.130"/>
+    <xacro:property name="wheel_radius"          value="0.049"/>
+    <xacro:property name="wheel_width"           value="0.038"/>
+    <xacro:property name="vehicle_length"        value="0.632"/>
+    <xacro:property name="vehicle_width"         value="0.210"/>
+    <xacro:property name="vehicle_height"        value="0.237"/>
+    <xacro:property name="total_mass"            value="6.5"/>
+    <xacro:property name="base_link_z"           value="${wheel_radius}"/>
+
+    <!-- Collision geometry (simple primitives) -->
+    <xacro:property name="chassis_length"        value="0.56"/>
+    <xacro:property name="chassis_width"         value="0.18"/>
+    <xacro:property name="chassis_height"        value="0.06"/>
+    <xacro:property name="cage_length"           value="0.20"/>
+    <xacro:property name="cage_width"            value="0.18"/>
+    <xacro:property name="cage_height"           value="0.14"/>
+    <xacro:property name="control_length"        value="0.20"/>
+    <xacro:property name="control_width"         value="0.14"/>
+    <xacro:property name="control_height"        value="0.03"/>
+    <xacro:property name="steering_col_size"     value="0.04"/>
+
+    <!-- Mass distribution (sums to 6.5 kg)
+         base=4.789, cage=0.6, control=0.2, steering=0.08×2, wheel=0.18×4,
+         imu=0.001, camera=0.03 → 4.789+0.6+0.2+0.16+0.72+0.001+0.03 = 6.500 -->
+    <xacro:property name="mass_base"             value="4.789"/>
+    <xacro:property name="mass_cage"             value="0.600"/>
+    <xacro:property name="mass_control"          value="0.200"/>
+    <xacro:property name="mass_steering"         value="0.080"/>
+    <xacro:property name="mass_wheel"            value="0.180"/>
+    <xacro:property name="mass_imu"              value="0.001"/>
+    <!-- Verify: 4.5 + 0.6 + 0.2 + 2*0.08 + 4*0.18 + 0.001 = 6.501 ≈ 6.5 -->
+
+    <material name="car_black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+    </material>
+    <material name="chassis_gray">
+        <color rgba="0.45 0.45 0.45 1.0"/>
+    </material>
+    <material name="wheel_white">
+        <color rgba="0.95 0.95 0.95 1.0"/>
+    </material>
+    <material name="support_gray">
+        <color rgba="0.35 0.35 0.35 1.0"/>
+    </material>
+    <material name="camera_black_material">
+        <color rgba="0.02 0.02 0.02 1.0"/>
+    </material>
+
+    <!-- ================================================================
+         Inertial Macros
+         ================================================================ -->
+    <xacro:macro name="box_inertial" params="mass x y z">
+        <inertial>
+            <mass value="${mass}"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="${(1/12)*mass*(y*y + z*z)}"
+                     ixy="0" ixz="0"
+                     iyy="${(1/12)*mass*(x*x + z*z)}"
+                     iyz="0"
+                     izz="${(1/12)*mass*(x*x + y*y)}"/>
+        </inertial>
+    </xacro:macro>
+
+    <!-- Cylinder with axis along Y (wheel rolling axis).
+         URDF cylinder axis is Z; rpy="${pi/2} 0 0" rotates Z->Y. -->
+    <xacro:macro name="cylinder_inertial_y" params="mass radius length">
+        <inertial>
+            <mass value="${mass}"/>
+            <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+            <inertia ixx="${(1/12)*mass*(3*radius*radius + length*length)}"
+                     ixy="0" ixz="0"
+                     iyy="${0.5*mass*radius*radius}"
+                     iyz="0"
+                     izz="${(1/12)*mass*(3*radius*radius + length*length)}"/>
+        </inertial>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Front Steering Assembly Macro
+         Same frame names as 1/16 model. Primitives only, no STL.
+         ================================================================ -->
+    <xacro:macro name="front_steering_assembly" params="side x_pos y_pos">
+        <link name="front_${side}_steering_link">
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder length="0.012" radius="0.006"/>
+                </geometry>
+                <material name="car_black"/>
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="${steering_col_size} ${steering_col_size} ${steering_col_size}"/>
+                </geometry>
+            </collision>
+            <xacro:box_inertial mass="${mass_steering}"
+                                x="${steering_col_size}"
+                                y="${steering_col_size}"
+                                z="${steering_col_size}"/>
+        </link>
+
+        <gazebo reference="front_${side}_steering_link">
+            <material>Gazebo/Black</material>
+        </gazebo>
+
+        <joint name="front_${side}_steering_joint" type="revolute">
+            <parent link="base_link"/>
+            <child link="front_${side}_steering_link"/>
+            <axis xyz="0 0 1"/>
+            <limit lower="-0.6" upper="0.6" effort="50" velocity="5.0"/>
+            <dynamics damping="0.1" friction="0.0"/>
+            <origin rpy="0 0 0" xyz="${x_pos} ${y_pos} 0"/>
+        </joint>
+
+        <!-- Wheel: cylinder visual along Y axis -->
+        <link name="front_${side}_wheel_link">
+            <visual>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+                <material name="wheel_white"/>
+            </visual>
+            <collision>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+            </collision>
+            <xacro:cylinder_inertial_y mass="${mass_wheel}"
+                                       radius="${wheel_radius}"
+                                       length="${wheel_width}"/>
+        </link>
+
+        <gazebo reference="front_${side}_wheel_link">
+            <material>Gazebo/White</material>
+        </gazebo>
+
+        <joint name="front_${side}_wheel_joint" type="continuous">
+            <parent link="front_${side}_steering_link"/>
+            <child link="front_${side}_wheel_link"/>
+            <axis xyz="0 1 0"/>
+            <dynamics damping="0.02" friction="0.0"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </joint>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Rear Wheel Assembly Macro
+         Direct children of base_link, no steering.
+         ================================================================ -->
+    <xacro:macro name="rear_wheel_assembly" params="side x_pos y_pos">
+        <link name="rear_${side}_wheel_link">
+            <visual>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+                <material name="wheel_white"/>
+            </visual>
+            <collision>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+            </collision>
+            <xacro:cylinder_inertial_y mass="${mass_wheel}"
+                                       radius="${wheel_radius}"
+                                       length="${wheel_width}"/>
+        </link>
+
+        <gazebo reference="rear_${side}_wheel_link">
+            <material>Gazebo/White</material>
+        </gazebo>
+
+        <joint name="rear_${side}_wheel_joint" type="continuous">
+            <parent link="base_link"/>
+            <child link="rear_${side}_wheel_link"/>
+            <axis xyz="0 1 0"/>
+            <dynamics damping="0.02" friction="0.0"/>
+            <origin rpy="0 0 0" xyz="${x_pos} ${y_pos} 0"/>
+        </joint>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Base Links
+         ================================================================ -->
+    <link name="base_footprint"/>
+
+    <link name="base_link">
+        <!-- Chassis body: box primitive -->
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="${vehicle_length} ${vehicle_width} ${chassis_height}"/>
+            </geometry>
+            <material name="chassis_gray"/>
+        </visual>
+        <!-- Camera support bracket: small vertical post from chassis top toward camera -->
+        <visual name="camera_support_visual">
+            <origin xyz="0.146 0 0.08" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.018 0.018 0.12"/>
+            </geometry>
+            <material name="support_gray"/>
+        </visual>
+        <collision>
+            <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+            <geometry>
+                <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+            </geometry>
+        </collision>
+        <xacro:box_inertial mass="${mass_base}"
+                            x="${chassis_length}"
+                            y="${chassis_width}"
+                            z="${chassis_height}"/>
+    </link>
+
+    <gazebo reference="base_link">
+        <material>Gazebo/Grey</material>
+    </gazebo>
+
+    <joint name="base_joint" type="fixed">
+        <parent link="base_footprint"/>
+        <child link="base_link"/>
+        <origin rpy="0 0 0" xyz="0 0 ${base_link_z}"/>
+    </joint>
+
+    <!-- ================================================================
+         Control Layer (electronics plate)
+         ================================================================ -->
+    <link name="control_layer_link">
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="${control_length} ${control_width} ${control_height}"/>
+            </geometry>
+        </collision>
+        <xacro:box_inertial mass="${mass_control}"
+                            x="${control_length}"
+                            y="${control_width}"
+                            z="${control_height}"/>
+    </link>
+
+        <joint name="control_layer_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="control_layer_link"/>
+        <origin rpy="0 0 0" xyz="0.01 0 0.07"/>
+    </joint>
+
+    <!-- ================================================================
+         Roll Cage
+         ================================================================ -->
+    <link name="cage_link">
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="${cage_length} ${cage_width} ${cage_height}"/>
+            </geometry>
+        </collision>
+        <xacro:box_inertial mass="${mass_cage}"
+                            x="${cage_length}"
+                            y="${cage_width}"
+                            z="${cage_height}"/>
+    </link>
+
+    <joint name="cage_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="cage_link"/>
+        <origin rpy="0 0 0" xyz="0.18 -0.06 0.07"/>
+    </joint>
+
+    <!-- ================================================================
+         Front Direction Marker (debug only)
+         ================================================================ -->
+    <link name="front_marker_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.08 0.015 0.015"/>
+            </geometry>
+            <material name="car_black"/>
+        </visual>
+    </link>
+
+    <gazebo reference="front_marker_link">
+        <material>Gazebo/Black</material>
+    </gazebo>
+
+    <joint name="front_marker_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="front_marker_link"/>
+        <origin rpy="0 0 0" xyz="0.28 0 0"/>
+    </joint>
+
+    <!-- ================================================================
+         Wheel Assemblies
+         ================================================================ -->
+    <xacro:front_steering_assembly side="left"
+                                   x_pos="${wheelbase/2}"
+                                   y_pos="${track_width/2}"/>
+
+    <xacro:front_steering_assembly side="right"
+                                   x_pos="${wheelbase/2}"
+                                   y_pos="${-track_width/2}"/>
+
+    <xacro:rear_wheel_assembly side="left"
+                               x_pos="${-wheelbase/2}"
+                               y_pos="${track_width/2}"/>
+
+    <xacro:rear_wheel_assembly side="right"
+                               x_pos="${-wheelbase/2}"
+                               y_pos="${-track_width/2}"/>
+
+    <!-- ================================================================
+         IMU Link
+         Tiny mass, negligible inertia.
+         ================================================================ -->
+    <link name="imu_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.015 0.015 0.008"/>
+            </geometry>
+            <material name="green">
+                <color rgba="0.2 0.8 0.2 1.0"/>
+            </material>
+        </visual>
+        <inertial>
+            <mass value="${mass_imu}"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-8" ixy="0" ixz="0" iyy="1e-8" iyz="0" izz="1e-8"/>
+        </inertial>
+    </link>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="imu_link"/>
+        <origin rpy="0 0 0" xyz="0 0 0.12"/>
+    </joint>
+
+    <!-- ================================================================
+         Camera Link
+         Measured 1/7 values:
+           camera_height_from_ground = 0.205 m
+           camera_x_offset_from_front = 0.170 m
+           camera_x_from_base_link = 0.632/2 - 0.170 = 0.146 m
+           camera_z_from_base_link = 0.205 - 0.049 = 0.156 m
+         Pitch: +0.5236 rad (same sign convention as 1/16 model)
+         ================================================================ -->
+    <link name="camera_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.008 0.05 0.03"/>
+            </geometry>
+            <material name="camera_black_material"/>
+        </visual>
+
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.008 0.05 0.03"/>
+            </geometry>
+        </collision>
+
+        <inertial>
+            <mass value="0.03"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+        </inertial>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="camera_link"/>
+        <origin rpy="0 0.5236 0" xyz="0.146 0 0.156"/>
+    </joint>
+
+    <!-- ROS optical convention: +Z forward, +X right, +Y down. -->
+    <link name="camera_optical_frame"/>
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+
+    <gazebo reference="camera_link">
+        <sensor name="front_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>30</update_rate>
+            <camera>
+                <horizontal_fov>1.3962634</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.02</near>
+                    <far>50.0</far>
+                </clip>
+            </camera>
+            <plugin name="front_camera_controller" filename="libgazebo_ros_camera.so">
+                <ros>
+                    <namespace>/camera</namespace>
+                    <remapping>image_raw:=image_raw</remapping>
+                    <remapping>camera_info:=camera_info</remapping>
+                </ros>
+                <frame_name>camera_optical_frame</frame_name>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+    <!-- ================================================================
+         ros2_control Hardware Interface
+         ================================================================ -->
+    <xacro:if value="$(arg use_ros2_control)">
+        <ros2_control name="rc_car_hardware" type="system">
+            <hardware>
+                <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+            </hardware>
+
+            <joint name="front_left_steering_joint">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="front_right_steering_joint">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+
+            <joint name="rear_left_wheel_joint">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="rear_right_wheel_joint">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+
+            <joint name="front_left_wheel_joint">
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="front_right_wheel_joint">
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+
+        <gazebo>
+            <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+                <parameters>$(arg controllers_file)</parameters>
+            </plugin>
+        </gazebo>
+    </xacro:if>
+
+    <!-- ================================================================
+         Gazebo Classic Ground Truth
+         ================================================================ -->
+    <gazebo>
+        <plugin filename="libgazebo_ros_p3d.so" name="ground_truth_p3d">
+            <ros>
+                <remapping>odom:=/ground_truth/odom</remapping>
+            </ros>
+            <body_name>base_footprint</body_name>
+            <update_rate>20.0</update_rate>
+            <gaussian_noise>0.0</gaussian_noise>
+        </plugin>
+    </gazebo>
+
+    <!-- ================================================================
+         Gazebo Classic IMU Sensor
+         ================================================================ -->
+    <gazebo reference="imu_link">
+        <sensor name="imu_sensor" type="imu">
+            <always_on>true</always_on>
+            <update_rate>100</update_rate>
+            <pose>0 0 0 0 0 0</pose>
+            <imu>
+                <noise type="gaussian">
+                    <rate>
+                        <mean>0.0</mean>
+                        <stddev>0.002</stddev>
+                    </rate>
+                    <accel>
+                        <mean>0.0</mean>
+                        <stddev>0.02</stddev>
+                    </accel>
+                </noise>
+            </imu>
+            <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_sensor_plugin">
+                <ros>
+                    <namespace>/imu</namespace>
+                    <remapping>~/out:=data</remapping>
+                </ros>
+                <frame_name>imu_link</frame_name>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+</robot>

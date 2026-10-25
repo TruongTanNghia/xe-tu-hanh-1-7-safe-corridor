@@ -1,0 +1,602 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rc">
+
+    <!-- ================================================================
+         RC Car Description - Phase 4
+         ROS 2 Humble | +X forward, +Y left, +Z up
+         Mesh orientation: chassis.stl mesh front faces -X in NX export.
+         Visual yaw correction pi (3.14159...) is applied in each mesh
+         visual block to align it with ROS +X forward convention.
+         DO NOT edit original STL files.
+
+         Phase 2 Changes:
+         - Added collision geometry (simple primitives) for all physical links
+         - Added inertial properties with mass distribution summing to 2.5 kg
+         Future ros2_control command joints:
+           steering: front_left_steering_joint, front_right_steering_joint
+           traction: rear_left_wheel_joint, rear_right_wheel_joint
+           non-driven rolling: front_left_wheel_joint, front_right_wheel_joint
+
+         Phase 4 / Classic migration:
+         - Added use_ros2_control xacro arg (default false)
+         - Added ros2_control hardware block (6 joints, guarded by use_ros2_control)
+         - Uses Gazebo Classic gazebo_ros2_control plugin when control is enabled
+         - Normal URDF/RViz still works without ros2_control
+         ================================================================ -->
+
+    <!-- ================================================================
+         Xacro Arguments
+         ================================================================ -->
+    <xacro:arg name="use_ros2_control" default="false"/>
+    <xacro:arg name="controllers_file" default=""/>
+
+    <!-- ================================================================
+         Xacro Properties - Measured Car Geometry
+         ================================================================ -->
+    <xacro:property name="wheelbase"             value="0.220"/>
+    <xacro:property name="track_width"           value="0.155"/>
+    <xacro:property name="wheel_radius"          value="0.040"/>
+    <xacro:property name="wheel_width_offset"    value="0.0225"/>
+    <xacro:property name="wheel_width"           value="${2 * wheel_width_offset}"/>
+    <xacro:property name="total_mass"            value="2.5"/>
+    <!-- base_link_z = wheel_radius: wheel centers sit one radius above ground
+         when base_footprint is at z=0, so wheel collision cylinders touch ground. -->
+    <xacro:property name="base_link_z"           value="${wheel_radius}"/>
+    <xacro:property name="mesh_scale"            value="0.001 0.001 0.001"/>
+    <xacro:property name="visual_yaw_correction" value="${pi}"/>
+
+    <!-- Collision geometry dimensions (simple primitives, not STL meshes) -->
+    <xacro:property name="base_collision_length"           value="0.28"/>
+    <xacro:property name="base_collision_width"             value="0.11"/>
+    <xacro:property name="base_collision_height"            value="0.035"/>
+    <xacro:property name="control_layer_collision_length"   value="0.16"/>
+    <xacro:property name="control_layer_collision_width"    value="0.08"/>
+    <xacro:property name="control_layer_collision_height"   value="0.02"/>
+    <xacro:property name="cage_collision_length"             value="0.16"/>
+    <xacro:property name="cage_collision_width"              value="0.10"/>
+    <xacro:property name="cage_collision_height"             value="0.08"/>
+    <xacro:property name="steering_link_collision_size"     value="0.025"/>
+
+    <!-- Mass distribution (sums to 2.5 kg) -->
+    <xacro:property name="mass_base_link"               value="1.799"/>
+    <xacro:property name="mass_cage_link"                value="0.20"/>
+    <xacro:property name="mass_control_layer_link"      value="0.10"/>
+    <xacro:property name="mass_steering_link"           value="0.02"/>
+    <xacro:property name="mass_wheel_link"              value="0.09"/>
+    <xacro:property name="mass_imu_link"                value="0.001"/>
+
+    <!-- Visual material used for the visible car body in RViz and Gazebo. -->
+    <material name="car_black">
+        <color rgba="0.0 0.0 0.0 1.0"/>
+    </material>
+
+    <!-- ================================================================
+         Inertial Macros
+         Box: ixx=(1/12)*m*(y^2+z^2), iyy=(1/12)*m*(x^2+z^2), izz=(1/12)*m*(x^2+y^2)
+         Cylinder (Y-axis): ixx=(1/12)*m*(3r^2+L^2), iyy=0.5*m*r^2, izz=(1/12)*m*(3r^2+L^2)
+         All products of inertia are zero.
+         ================================================================ -->
+    <xacro:macro name="box_inertial" params="mass x y z">
+        <inertial>
+            <mass value="${mass}"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="${(1/12)*mass*(y*y + z*z)}"
+                     ixy="0" ixz="0"
+                     iyy="${(1/12)*mass*(x*x + z*z)}"
+                     iyz="0"
+                     izz="${(1/12)*mass*(x*x + y*y)}"/>
+        </inertial>
+    </xacro:macro>
+
+    <!-- Cylinder with axis along Y (wheel rolling axis).
+         URDF cylinder axis is Z; rpy="${pi/2} 0 0" rotates Z->Y. -->
+    <xacro:macro name="cylinder_inertial_y" params="mass radius length">
+        <inertial>
+            <mass value="${mass}"/>
+            <origin xyz="0 0 0" rpy="${pi/2} 0 0"/>
+            <inertia ixx="${(1/12)*mass*(3*radius*radius + length*length)}"
+                     ixy="0" ixz="0"
+                     iyy="${0.5*mass*radius*radius}"
+                     iyz="0"
+                     izz="${(1/12)*mass*(3*radius*radius + length*length)}"/>
+        </inertial>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Front Steering Assembly Macro
+         Phase 1: empty steering link for Ackermann rotation around Z.
+         Phase 2: added collision box + inertial + debug visual cylinder.
+         Future ros2_control command joint: front_*_steering_joint
+         ================================================================ -->
+    <xacro:macro name="front_steering_assembly" params="side x_pos y_pos visual_y_offset">
+        <link name="front_${side}_steering_link">
+            <!-- Phase 1 debug visual: tiny cylinder along Z to mark steering pivot -->
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder length="0.008" radius="0.004"/>
+                </geometry>
+                <material name="car_black"/>
+            </visual>
+            <!-- Phase 2 collision: small box centered at steering pivot -->
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="${steering_link_collision_size} ${steering_link_collision_size} ${steering_link_collision_size}"/>
+                </geometry>
+            </collision>
+            <!-- Phase 2 inertial -->
+            <xacro:box_inertial mass="${mass_steering_link}"
+                                x="${steering_link_collision_size}"
+                                y="${steering_link_collision_size}"
+                                z="${steering_link_collision_size}"/>
+        </link>
+
+        <gazebo reference="front_${side}_steering_link">
+            <material>Gazebo/Black</material>
+        </gazebo>
+
+        <!-- Steering joint: revolute around Z = wheel steering angle -->
+        <joint name="front_${side}_steering_joint" type="revolute">
+            <parent link="base_link"/>
+            <child link="front_${side}_steering_link"/>
+            <axis xyz="0 0 1"/>
+            <limit lower="-0.6" upper="0.6" effort="10" velocity="3.0"/>
+            <origin rpy="0 0 0" xyz="${x_pos} ${y_pos} 0"/>
+        </joint>
+
+        <!-- Wheel link: child of steering_link, carries the wheel mesh -->
+        <link name="front_${side}_wheel_link">
+            <visual>
+                <origin rpy="0 0 ${visual_yaw_correction}"
+                        xyz="0 ${visual_y_offset} 0"/>
+                <geometry>
+                    <mesh filename="package://rc_description/meshes/wheel_front_${side}.stl"
+                          scale="${mesh_scale}"/>
+                </geometry>
+                <material name="car_black"/>
+            </visual>
+            <!-- Phase 2 collision: cylinder along Y axis (wheel rolling) -->
+            <collision>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+            </collision>
+            <!-- Phase 2 inertial -->
+            <xacro:cylinder_inertial_y mass="${mass_wheel_link}"
+                                       radius="${wheel_radius}"
+                                       length="${wheel_width}"/>
+        </link>
+
+        <gazebo reference="front_${side}_wheel_link">
+            <material>Gazebo/Black</material>
+        </gazebo>
+
+        <!-- Wheel spin joint: continuous rotation around wheel axle (Y axis) -->
+        <joint name="front_${side}_wheel_joint" type="continuous">
+            <parent link="front_${side}_steering_link"/>
+            <child link="front_${side}_wheel_link"/>
+            <axis xyz="0 1 0"/>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+        </joint>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Rear Wheel Assembly Macro
+         Rear wheels: direct children of base_link, no steering.
+         Phase 2: added collision + inertial.
+         Future ros2_control traction command joint: rear_*_wheel_joint
+         ================================================================ -->
+    <xacro:macro name="rear_wheel_assembly" params="side x_pos y_pos visual_y_offset">
+        <link name="rear_${side}_wheel_link">
+            <visual>
+                <origin rpy="0 0 ${visual_yaw_correction}"
+                        xyz="0 ${visual_y_offset} 0"/>
+                <geometry>
+                    <mesh filename="package://rc_description/meshes/wheel_rear_${side}.stl"
+                          scale="${mesh_scale}"/>
+                </geometry>
+                <material name="car_black"/>
+            </visual>
+            <!-- Phase 2 collision: cylinder along Y axis (wheel rolling) -->
+            <collision>
+                <origin rpy="${pi/2} 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+                </geometry>
+            </collision>
+            <!-- Phase 2 inertial -->
+            <xacro:cylinder_inertial_y mass="${mass_wheel_link}"
+                                       radius="${wheel_radius}"
+                                       length="${wheel_width}"/>
+        </link>
+
+        <gazebo reference="rear_${side}_wheel_link">
+            <material>Gazebo/Black</material>
+        </gazebo>
+
+        <joint name="rear_${side}_wheel_joint" type="continuous">
+            <parent link="base_link"/>
+            <child link="rear_${side}_wheel_link"/>
+            <axis xyz="0 1 0"/>
+            <origin rpy="0 0 0" xyz="${x_pos} ${y_pos} 0"/>
+        </joint>
+    </xacro:macro>
+
+    <!-- ================================================================
+         Base Links
+         ================================================================ -->
+    <link name="base_footprint"/>
+
+    <link name="base_link">
+        <visual>
+            <origin rpy="0 0 ${visual_yaw_correction}" xyz="0 0 0"/>
+            <geometry>
+                <mesh filename="package://rc_description/meshes/chassis.stl"
+                      scale="${mesh_scale}"/>
+            </geometry>
+            <material name="car_black"/>
+        </visual>
+        <!-- Phase 2 collision: lower chassis/body box -->
+        <collision>
+            <origin xyz="0 0 ${base_collision_height/2}" rpy="0 0 0"/>
+            <geometry>
+                <box size="${base_collision_length} ${base_collision_width} ${base_collision_height}"/>
+            </geometry>
+        </collision>
+        <!-- Phase 2 inertial -->
+        <xacro:box_inertial mass="${mass_base_link}"
+                            x="${base_collision_length}"
+                            y="${base_collision_width}"
+                            z="${base_collision_height}"/>
+    </link>
+
+    <gazebo reference="base_link">
+        <material>Gazebo/Black</material>
+    </gazebo>
+
+    <!-- Fixed joint: base_footprint -> base_link -->
+    <joint name="base_joint" type="fixed">
+        <parent link="base_footprint"/>
+        <child link="base_link"/>
+        <origin rpy="0 0 0" xyz="0 0 ${base_link_z}"/>
+    </joint>
+
+    <!-- ================================================================
+         Chassis / Body Fixed Links
+         ================================================================ -->
+    <link name="control_layer_link">
+        <visual>
+            <origin rpy="0 0 ${visual_yaw_correction}" xyz="0 0 0"/>
+            <geometry>
+                <mesh filename="package://rc_description/meshes/base.stl"
+                      scale="${mesh_scale}"/>
+            </geometry>
+            <material name="car_black"/>
+        </visual>
+        <!-- Phase 2 collision: electronics speed controller base plate -->
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="${control_layer_collision_length} ${control_layer_collision_width} ${control_layer_collision_height}"/>
+            </geometry>
+        </collision>
+        <!-- Phase 2 inertial -->
+        <xacro:box_inertial mass="${mass_control_layer_link}"
+                            x="${control_layer_collision_length}"
+                            y="${control_layer_collision_width}"
+                            z="${control_layer_collision_height}"/>
+    </link>
+
+    <gazebo reference="control_layer_link">
+        <material>Gazebo/Black</material>
+    </gazebo>
+
+    <joint name="control_layer_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="control_layer_link"/>
+        <origin rpy="0 0 0" xyz="0.005 0 0.0365"/>
+    </joint>
+
+    <link name="cage_link">
+        <visual>
+            <origin rpy="0 0 ${visual_yaw_correction}" xyz="0 0 0"/>
+            <geometry>
+                <mesh filename="package://rc_description/meshes/cage.stl"
+                      scale="${mesh_scale}"/>
+            </geometry>
+            <material name="car_black"/>
+        </visual>
+        <!-- Phase 2 collision: roll-cage bounding box -->
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="${cage_collision_length} ${cage_collision_width} ${cage_collision_height}"/>
+            </geometry>
+        </collision>
+        <!-- Phase 2 inertial -->
+        <xacro:box_inertial mass="${mass_cage_link}"
+                            x="${cage_collision_length}"
+                            y="${cage_collision_width}"
+                            z="${cage_collision_height}"/>
+    </link>
+
+    <gazebo reference="cage_link">
+        <material>Gazebo/Black</material>
+    </gazebo>
+
+    <joint name="cage_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="cage_link"/>
+        <origin rpy="0 0 0" xyz="0.125 -0.055 0.0368"/>
+    </joint>
+
+    <!-- ================================================================
+         Front Direction Marker (debug only - remove in later phases)
+         No collision or inertial: visual/debug only
+         ================================================================ -->
+    <link name="front_marker_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.05 0.01 0.01"/>
+            </geometry>
+            <material name="car_black">
+                <color rgba="0.0 0.0 0.0 1.0"/>
+            </material>
+        </visual>
+        <!-- Phase 2: no collision, no inertial (debug marker only) -->
+    </link>
+
+    <gazebo reference="front_marker_link">
+        <material>Gazebo/Black</material>
+    </gazebo>
+
+    <joint name="front_marker_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="front_marker_link"/>
+        <origin rpy="0 0 0" xyz="0.15 0 0"/>
+    </joint>
+
+    <!-- ================================================================
+         Wheel Assemblies
+         ROS convention: +X = forward, +Y = left
+         Phase 1: front wheels have steering_link + wheel_link hierarchy
+         Phase 2: collision + inertial on all physical links
+         ================================================================ -->
+
+    <!-- Front Left: steering around Z, then wheel spin around Y -->
+    <xacro:front_steering_assembly side="left"
+                                   x_pos="${wheelbase/2}"
+                                   y_pos="${track_width/2}"
+                                   visual_y_offset="${wheel_width_offset}"/>
+
+    <!-- Front Right: steering around Z, then wheel spin around Y -->
+    <xacro:front_steering_assembly side="right"
+                                   x_pos="${wheelbase/2}"
+                                   y_pos="${-track_width/2}"
+                                   visual_y_offset="${-wheel_width_offset}"/>
+
+    <!-- Rear Left: direct child of base_link, spin around Y -->
+    <xacro:rear_wheel_assembly side="left"
+                               x_pos="${-wheelbase/2}"
+                               y_pos="${track_width/2}"
+                               visual_y_offset="${wheel_width_offset}"/>
+
+    <!-- Rear Right: direct child of base_link, spin around Y -->
+    <xacro:rear_wheel_assembly side="right"
+                               x_pos="${-wheelbase/2}"
+                               y_pos="${-track_width/2}"
+                               visual_y_offset="${-wheel_width_offset}"/>
+
+    <!-- ================================================================
+         IMU Link (Phase 8)
+         Tiny mass (0.001 kg), compensated by mass_base_link so total remains 2.5 kg.
+         Mounted at z=0.08 above base_link center.
+         ================================================================ -->
+    <link name="imu_link">
+        <!-- Visual: tiny box as IMU marker -->
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.01 0.005"/>
+            </geometry>
+            <material name="green">
+                <color rgba="0.2 0.8 0.2 1.0"/>
+            </material>
+        </visual>
+        <!-- No collision -->
+        <!-- Tiny inertial: 0.001 kg, negligible inertia -->
+        <inertial>
+            <mass value="${mass_imu_link}"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-8" ixy="0" ixz="0" iyy="1e-8" iyz="0" izz="1e-8"/>
+        </inertial>
+    </link>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="imu_link"/>
+        <origin rpy="0 0 0" xyz="0 0 0.08"/>
+    </joint>
+
+    <!-- ================================================================
+         Camera Link
+         Box visual + Gazebo Classic camera sensor.
+         Mounted relative to base_link: +X forward, +Y left, +Z up.
+         ================================================================ -->
+    <link name="camera_link">
+        <visual>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.005 0.03 0.02"/>
+            </geometry>
+            <material name="camera_black">
+                <color rgba="0.02 0.02 0.02 1.0"/>
+            </material>
+        </visual>
+
+        <collision>
+            <origin rpy="0 0 0" xyz="0 0 0"/>
+            <geometry>
+                <box size="0.005 0.03 0.02"/>
+            </geometry>
+        </collision>
+
+        <inertial>
+            <mass value="0.02"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+        </inertial>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="camera_link"/>
+        <origin rpy="0 0.1745 0" xyz="0.035 0 0.12"/>
+    </joint>
+
+    <!-- ROS optical convention: +Z forward, +X right, +Y down. -->
+    <link name="camera_optical_frame"/>
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="${-pi/2} 0 ${-pi/2}"/>
+    </joint>
+
+    <gazebo reference="camera_link">
+        <sensor name="front_camera" type="camera">
+            <always_on>true</always_on>
+            <update_rate>30</update_rate>
+            <camera>
+                <!-- <horizontal_fov>1.3962634</horizontal_fov> -->
+                <horizontal_fov>2.094</horizontal_fov>
+                <image>
+                    <width>854</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.02</near>
+                    <far>50.0</far>
+                </clip>
+            </camera>
+            <plugin name="front_camera_controller" filename="libgazebo_ros_camera.so">
+                <ros>
+                    <namespace>/camera</namespace>
+                    <remapping>image_raw:=image_raw</remapping>
+                    <remapping>camera_info:=camera_info</remapping>
+                </ros>
+                <frame_name>camera_optical_frame</frame_name>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+
+
+    <!-- ================================================================
+         ros2_control Hardware Interface
+         Phase 4: connects Gazebo joints to ros2_control for manual testing
+         ================================================================ -->
+    <xacro:if value="$(arg use_ros2_control)">
+        <ros2_control name="rc_car_hardware" type="system">
+            <hardware>
+                <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+            </hardware>
+
+            <!-- Steering joints: command + state position/velocity -->
+            <joint name="front_left_steering_joint">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="front_right_steering_joint">
+                <command_interface name="position"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+
+            <!-- Rear wheel joints: command + state velocity -->
+            <joint name="rear_left_wheel_joint">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="rear_right_wheel_joint">
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+
+            <!-- Passive front wheel spin joints: state only -->
+            <joint name="front_left_wheel_joint">
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="front_right_wheel_joint">
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+
+        <!-- Gazebo Classic ros2_control plugin (activates when use_ros2_control=true) -->
+        <gazebo>
+            <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+                <parameters>$(arg controllers_file)</parameters>
+            </plugin>
+        </gazebo>
+    </xacro:if>
+
+    <!-- ================================================================
+         Gazebo Classic Ground Truth (migration)
+         Publishes /ground_truth/odom directly from Gazebo Classic via P3D.
+         This replaces the old Ignition dynamic_pose/info bridge.
+         ================================================================ -->
+    <gazebo>
+        <plugin filename="libgazebo_ros_p3d.so" name="ground_truth_p3d">
+            <ros>
+                <remapping>odom:=/ground_truth/odom</remapping>
+            </ros>
+            <frame_name>map</frame_name>
+            <body_name>base_footprint</body_name>
+            <update_rate>20.0</update_rate>
+            <gaussian_noise>0.0</gaussian_noise>
+        </plugin>
+    </gazebo>
+
+    <!-- ================================================================
+         Gazebo Classic IMU Sensor (Phase 8)
+         imu_sensor attached to imu_link.
+         Gazebo Classic publishes ROS /imu/data directly via gazebo_ros plugin.
+         SDFormat noise: rate (rad/s) and accel (m/s^2) with gaussian model.
+         ================================================================ -->
+    <gazebo reference="imu_link">
+        <sensor name="imu_sensor" type="imu">
+            <always_on>true</always_on>
+            <update_rate>100</update_rate>
+            <pose>0 0 0 0 0 0</pose>
+            <imu>
+                <noise type="gaussian">
+                    <rate>
+                        <mean>0.0</mean>
+                        <stddev>0.002</stddev>
+                    </rate>
+                    <accel>
+                        <mean>0.0</mean>
+                        <stddev>0.02</stddev>
+                    </accel>
+                </noise>
+            </imu>
+            <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_sensor_plugin">
+                <ros>
+                    <namespace>/imu</namespace>
+                    <remapping>~/out:=data</remapping>
+                </ros>
+                <frame_name>imu_link</frame_name>
+            </plugin>
+        </sensor>
+    </gazebo>
+
+</robot>
